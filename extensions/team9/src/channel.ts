@@ -2,6 +2,12 @@
  * Team9 Channel Plugin
  *
  * Implements the ChannelPlugin interface for Team9 integration
+ *
+ * Session Isolation:
+ * Each Team9 user gets their own isolated agent with a separate workspace.
+ * This ensures conversation context (IDENTITY.md, SOUL.md, USER.md) is not shared
+ * between users. The agentId is generated as `team9-user-{senderId}` and the
+ * workspace is automatically created at `~/clawd-team9-user-{senderId}`.
  */
 
 import type { ChannelPlugin, MoltbotConfig } from "clawdbot/plugin-sdk";
@@ -19,6 +25,36 @@ import { Team9ApiClient } from "./api-client.js";
 import { Team9WebSocketClient, createTeam9WsClient } from "./websocket-client.js";
 import { team9OnboardingAdapter } from "./onboarding.js";
 
+/**
+ * Generate a unique agent ID for a Team9 user.
+ * This ensures each user gets their own isolated workspace at ~/clawd-{agentId}.
+ *
+ * For DM chats: uses senderId to isolate per user
+ * For group chats: uses channelId to isolate per group
+ */
+function generateTeam9AgentId(params: { senderId: string; channelId: string; isGroup: boolean }): string {
+  // For group chats, use channelId so all group members share context
+  // For DM chats, use senderId so each user has their own context
+  const identifier = params.isGroup ? params.channelId : params.senderId;
+  // Sanitize to be safe for use in file paths
+  const sanitized = identifier.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+  const prefix = params.isGroup ? "team9-group" : "team9-user";
+  return `${prefix}-${sanitized}`;
+}
+
+/**
+ * Build a session key for Team9 with per-user/group agent isolation.
+ * Format: agent:{agentId}:team9:{peerKind}:{channelId}
+ */
+function buildTeam9SessionKey(params: {
+  agentId: string;
+  channelId: string;
+  isGroup: boolean;
+}): string {
+  const peerKind = params.isGroup ? "group" : "dm";
+  return `agent:${params.agentId}:team9:${peerKind}:${params.channelId}`.toLowerCase();
+}
+
 // Store current bot user ID to filter out self-messages
 let currentBotUserId: string | null = null;
 
@@ -33,6 +69,9 @@ const activeConnections = new Map<
 
 /**
  * Handle incoming message from Team9 and route to Moltbot agent
+ *
+ * Uses per-user/group agent isolation to ensure each user has their own
+ * workspace and conversation context.
  */
 async function handleIncomingMessage(
   message: Team9IncomingMessage,
@@ -58,16 +97,23 @@ async function handleIncomingMessage(
 
   console.log(`[Team9] Processing message from ${message.senderName}: ${plainContent.substring(0, 50)}...`);
 
-  // Resolve routing for this message
-  const route = runtime.channel.routing.resolveAgentRoute({
-    cfg,
-    channel: "team9",
-    accountId: account.accountId,
-    peer: {
-      kind: message.isGroup ? "group" : "dm",
-      id: message.channelId,
-    },
+  // Generate per-user/group agent ID for workspace isolation
+  // Each user gets their own agent with isolated workspace at ~/clawd-team9-user-{senderId}
+  // Each group gets shared agent with workspace at ~/clawd-team9-group-{channelId}
+  const agentId = generateTeam9AgentId({
+    senderId: message.senderId,
+    channelId: message.channelId,
+    isGroup: message.isGroup,
   });
+
+  // Build session key with isolated agent
+  const sessionKey = buildTeam9SessionKey({
+    agentId,
+    channelId: message.channelId,
+    isGroup: message.isGroup,
+  });
+
+  console.log(`[Team9] Session isolation: agentId=${agentId}, sessionKey=${sessionKey}`);
 
   // Build the message context
   const fromLabel = message.isGroup
@@ -82,7 +128,7 @@ async function handleIncomingMessage(
     CommandBody: plainContent,
     From: to,
     To: to,
-    SessionKey: route.sessionKey,
+    SessionKey: sessionKey,
     AccountId: account.accountId,
     ChatType: message.isGroup ? "group" : "direct",
     ConversationLabel: fromLabel,
@@ -100,7 +146,7 @@ async function handleIncomingMessage(
   // Create reply dispatcher that sends responses back to Team9
   const { dispatcher, replyOptions, markDispatchIdle } =
     runtime.channel.reply.createReplyDispatcherWithTyping({
-      humanDelay: runtime.channel.reply.resolveHumanDelayConfig(cfg, route.agentId),
+      humanDelay: runtime.channel.reply.resolveHumanDelayConfig(cfg, agentId),
       deliver: async (payload) => {
         // Send reply to Team9
         if (payload.text) {
