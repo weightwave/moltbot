@@ -103,6 +103,12 @@ const routeMemoryStatus: RouteSpec = {
   },
 };
 
+const routePairing: RouteSpec = {
+  match: (path) => path[0] === "pairing",
+  loadPlugins: true,
+  run: async () => false,
+};
+
 export const commandRegistry: CommandRegistration[] = [
   {
     id: "setup",
@@ -142,6 +148,7 @@ export const commandRegistry: CommandRegistration[] = [
   {
     id: "subclis",
     register: ({ program, argv }) => registerSubCliCommands(program, argv),
+    routes: [routePairing],
   },
   {
     id: "status-health-sessions",
