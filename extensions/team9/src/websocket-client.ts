@@ -283,6 +283,7 @@ export function createTeam9WsClient(
   handlers: {
     onMessage?: Team9MessageHandler;
     onConnect?: () => void;
+    onAuthenticated?: (userId: string) => void;
     onDisconnect?: (reason: string) => void;
     onError?: (error: Error) => void;
   }
