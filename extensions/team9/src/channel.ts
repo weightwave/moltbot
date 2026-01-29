@@ -172,6 +172,19 @@ async function getConnection(account: ResolvedTeam9Account, cfg: MoltbotConfig) 
       onConnect: () => {
         console.log(`[Team9] WebSocket connected for account: ${account.accountId}`);
       },
+      onAuthenticated: async (userId) => {
+        // Join all existing channels to receive messages
+        try {
+          const channels = await api.getUserChannels();
+          console.log(`[Team9] Joining ${channels.length} existing channels...`);
+          for (const channel of channels) {
+            ws.joinChannel(channel.id);
+          }
+          console.log(`[Team9] Joined all channels successfully`);
+        } catch (err) {
+          console.error(`[Team9] Failed to join existing channels:`, err);
+        }
+      },
       onDisconnect: (reason) => {
         console.log(`[Team9] WebSocket disconnected: ${reason}`);
       },

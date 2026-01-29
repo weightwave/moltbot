@@ -20,6 +20,7 @@ export type Team9WsClientOptions = {
   accountId: string;
   onMessage?: Team9MessageHandler;
   onConnect?: () => void;
+  onAuthenticated?: (userId: string) => void;
   onDisconnect?: (reason: string) => void;
   onError?: (error: Error) => void;
 };
@@ -60,6 +61,8 @@ export class Team9WebSocketClient {
           this.isConnected = true;
           this.startHeartbeat();
           this.options.onConnect?.();
+          // Notify about authentication so caller can join existing channels
+          this.options.onAuthenticated?.(data.userId);
           resolve();
         });
 
@@ -98,6 +101,13 @@ export class Team9WebSocketClient {
       console.error(`[Team9 WS] Connection error:`, error);
       this.reconnectAttempts++;
       this.options.onError?.(error);
+    });
+
+    // Channel events - auto-join new channels (e.g., when someone starts a DM)
+    this.socket.on("channel_created", (channel: { id: string; name?: string; type?: string }) => {
+      console.log(`[Team9 WS] New channel created: ${channel.id} (${channel.type || 'unknown'})`);
+      // Auto-join the channel to receive messages
+      this.joinChannel(channel.id);
     });
 
     // Message events
