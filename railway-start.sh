@@ -29,7 +29,7 @@ echo "Onboarding complete."
 if [ -n "$TEAM9_BASE_URL" ] && [ -n "$TEAM9_USERNAME" ] && [ -n "$TEAM9_PASSWORD" ]; then
   echo "Configuring Team9 channel..."
 
-  CONFIG_FILE="$CONFIG_DIR/moltbot.json5"
+  CONFIG_FILE="$CONFIG_DIR/moltbot.json"
 
   # 使用 node 来更新配置文件 (合并而非覆盖)
   node -e "
