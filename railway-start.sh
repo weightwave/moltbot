@@ -72,16 +72,58 @@ if (process.env.TEAM9_WORKSPACE_ID) {
   config.channels.team9.workspaceId = process.env.TEAM9_WORKSPACE_ID;
 }
 
+// 启用 team9 插件 (bundled 插件默认禁用，必须显式启用)
+config.plugins = config.plugins || {};
+config.plugins.entries = config.plugins.entries || {};
+config.plugins.entries.team9 = {
+  ...(config.plugins.entries.team9 || {}),
+  enabled: true
+};
+
+// 配置 agents.defaults (性能与并发)
+config.agents = config.agents || {};
+config.agents.defaults = config.agents.defaults || {};
+Object.assign(config.agents.defaults, {
+  contextPruning: { mode: 'cache-ttl', ttl: '1h' },
+  compaction: { mode: 'safeguard' },
+  heartbeat: { every: '30m' },
+  maxConcurrent: 4,
+  subagents: { maxConcurrent: 8 }
+});
+
 // 配置 LLM 模型 (如果环境变量存在)
 if (process.env.LLM_MODEL) {
-  config.agents = config.agents || {};
-  config.agents.defaults = config.agents.defaults || {};
   config.agents.defaults.model = {
     ...(config.agents.defaults.model || {}),
     primary: process.env.LLM_MODEL
   };
   console.log('LLM Model: ' + process.env.LLM_MODEL);
 }
+
+// 消息确认策略
+config.messages = config.messages || {};
+config.messages.ackReactionScope = config.messages.ackReactionScope || 'group-mentions';
+
+// 启用原生命令与技能
+config.commands = config.commands || {};
+config.commands.native = config.commands.native || 'auto';
+config.commands.nativeSkills = config.commands.nativeSkills || 'auto';
+
+// 启用内部 hooks (session-memory / boot-md / command-logger)
+config.hooks = config.hooks || {};
+config.hooks.internal = {
+  enabled: true,
+  entries: {
+    'boot-md': { enabled: true },
+    'command-logger': { enabled: true },
+    'session-memory': { enabled: true }
+  }
+};
+
+// skills 包管理器
+config.skills = config.skills || {};
+config.skills.install = config.skills.install || {};
+config.skills.install.nodeManager = config.skills.install.nodeManager || 'pnpm';
 
 fs.writeFileSync(path, JSON.stringify(config, null, 2));
 console.log('Team9 channel configured: ' + process.env.TEAM9_BASE_URL);
