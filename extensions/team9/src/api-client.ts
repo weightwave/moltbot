@@ -85,7 +85,7 @@ export class Team9ApiClient {
   }
 
   async getUserChannels(): Promise<Team9Channel[]> {
-    return this.fetch<Team9Channel[]>("/im/channels/me");
+    return this.fetch<Team9Channel[]>("/im/channels");
   }
 
   // ==================== Messages ====================
